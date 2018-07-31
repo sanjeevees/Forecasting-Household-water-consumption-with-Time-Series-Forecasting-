@@ -1,0 +1,70 @@
+library(car)
+setwd("C:\\users\\Sanjeevees\\Desktop")
+
+##
+## Standard Regression Diagnositcs
+##
+setwd("C:\\users\\Sanjeevees\\Desktop")
+concord<- foreign::read.spss("ConcordH2OTimeSeries.sav", to.data.frame = TRUE)
+model<- lm(H2Ouse~temp+rain+educ+time,concord )
+summary(model)
+
+model.res<- ts(residuals(model))
+acf(model.res)
+
+## Generate harmonic variables
+concord$sin6 <- sin(concord$time/6*2*pi)
+concord$cos6 <- cos(concord$time/6*2*pi)
+concord$cos12 <- cos(concord$time/12*2*pi)
+concord$sin12 <- sin(concord$time/12*2*pi)
+
+## Augmented Model
+fourier.lm <- lm(H2Ouse~temp+rain+educ+time+sin6+cos6+cos12+sin12,concord)
+summary(fourier.lm)  
+
+vif(fourier.lm)
+
+ts.res <- ts(residuals(fourier.lm))
+acf(ts.res)
+forecast::auto.arima(ts.res)
+
+model2<-lm(H2Ouse~educ+time+sin6+cos6+cos12+sin12,concord)
+model3<-lm(H2Ouse~educ+time,concord)
+anova( model3,model)
+
+res2<-residuals(model2)
+acf(res2)
+set.seed(NULL)
+durbinWatsonTest(model2, max.lag=12, simulate=TRUE, alternative="positive")
+
+ts.res2<-ts(residuals(model2),start=c(1970, 1))
+forecast::auto.arima(ts.res2,)
+
+library(nlme)
+fourier.gls2 <- gls(H2Ouse~educ+time+sin6+cos6+cos12+sin12, data=concord, 
+                    correlation=corARMA(p=1,q=1), method="ML")
+summary(fourier.gls2)
+
+ts.gls.res <- ts(residuals(fourier.gls2))
+
+ts.gls.res <- ts(residuals(fourier.gls2, type="normalized"),      # type="normalized": AC adjusted residuals 
+                 frequency = 12, start = c(1970, 1)) 
+
+acf(ts.gls.res)
+pacf(ts.gls.res)
+
+sqrt((fourier.lm$coef["sin6"]^2+fourier.lm$coef["cos6"]^2))
+
+sqrt((fourier.lm$coef["sin12"]^2+fourier.lm$coef["cos12"]^2))
+
+deltaMethod()
+
+ampYse <- deltaMethod(fourier.lm,"sqrt(cos6^2+sin6^2)")
+ampHse <- deltaMethod(fourier.lm,"sqrt(sin12^2+cos12^2)")
+
+fourierResult <- rbind(ampYse,ampHse)
+row.names(fourierResult) <- c("Cycle 12 Months:","Cycle 6 Months:")
+round(fourierResult,3)
+
+## Durbin-Watson Test
+durbinWatsonTest(fourier.lm, max.lag=6, simulate=TRUE, alternative="positive")
